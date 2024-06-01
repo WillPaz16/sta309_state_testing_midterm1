@@ -1,0 +1,154 @@
+---
+title: 'Takehome Midterm #1'
+author: "Will Paz"
+date: "2024-03-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Data Entry
+
+```{r}
+tests <- read_csv("ohio_education_clean.csv",
+                  show_col_types = FALSE)
+```
+
+## Problem 1
+
+Your first goal is to create a visualization that illustrates how test scores changed in the years leading up to the pandemic for each of the three subjects (unfortunately, the data is not available yet for 2020 onward). To do this, you will first need to do some data cleaning. Here are a couple tips:
+
+The Ohio averages are included in the data. Be sure to filter these out when plotting individual schools. However, these values may be useful for your visualization!
+
+The values are stored as ranges. You will need to determine how to convert these to numeric values that represent the data reasonably well. 
+
+  * I have already extracted the minimum and maximum values, but it probably makes more sense to condense these to a single number for each row.
+
+  * You may need to filter out some entries that are not specific enough (for instance, GE50, meaning greater than or equal to 50% pass rate). That is too wide a range to get a good sense of where that district falls. You will need to decide what a reasonable range is. 
+
+Be sure to follow all of the data visualization principles we have covered to create an informative, professional-quality figure. Your visualization must include data from all 4 school years, as well as the two academic subjects (reading and mathematics); however, this information may be distributed across multiple panels. 
+
+### Data Wrangling
+
+```{r}
+tests_clean <- tests %>%
+  select(SchoolYear,LEA_ID,Value_Min,Value_Max,Denominator,Subject) %>%
+  filter(Subject != "Science",
+         !is.na(Value_Min),
+         !is.na(Value_Max),
+         !is.na(LEA_ID),
+         Denominator > 30 & Denominator < 5000) %>%
+  mutate(Avg_Score = (Value_Min + Value_Max)/2) %>%
+  filter(Avg_Score >= 10) %>%
+  group_by(SchoolYear,Subject)
+glimpse(tests_clean)
+```
+
+```{r}
+test_state_avg <- tests %>%
+  filter(Denominator > 5000,
+         Subject != "Science") %>%
+  select(Value,SchoolYear,Subject) %>%
+  mutate(Value = as.numeric(Value))
+glimpse(test_state_avg)
+```
+
+### Exploratory Data Visualization
+
+```{r}
+ggplot(tests_clean) +
+  geom_boxplot(aes(x=SchoolYear,y=Avg_Score))
+```
+
+
+### Explanatory Data Visualization
+
+```{r}
+ggplot() +
+  geom_line(data=tests_clean,aes(x=SchoolYear,y=Avg_Score,group=LEA_ID),color="gray85") +
+  geom_line(data=test_state_avg,aes(x=SchoolYear,y=Value,group=Subject,color=Subject),size=2) +
+  scale_color_manual(values=c("goldenrod","dodgerblue")) +
+  annotate("label",x=3,y=71,label="Reading/Language Arts",color="dodgerblue") +
+  annotate("label",x=2,y=35,label="Mathematics",color="goldenrod") +
+  labs(x=element_blank(),
+       y="Average Score",
+       title="Observing Ohio State Testing Scores from 2015 to 2019",
+       subtitle="Sampling is limited to schools with more than 30 students",
+       caption="Source: Ohio Highschool Performance Data") +
+  theme_minimal() +
+  theme(legend.position="none",
+        panel.grid.minor.y = element_blank())
+```
+
+## Problem 2
+
+Suppose you have been hired by a school district to show how the district's scores compare to other districts in the state. Pick a school in the data set, and create a visualization to show how that school's scores compare to other schools in the state. Again, be sure to follow all of the data visualization principles we have covered to create an informative, professional-quality figure. Add annotations to the figure to highlight and detail the chosen school's performance. Focus on the story! What do the data show for this particular district?
+
+```{r}
+test_nc <- tests %>%
+  select(SchoolYear,LEA,Value,Denominator,Subject) %>%
+  filter(Subject != "Science",
+         LEA == "North Canton City") %>%
+  mutate(Value = as.numeric(Value))
+glimpse(test_nc)
+
+test_total <- bind_rows(test_nc,test_state_avg)
+test_total <- test_total %>%
+  select(SchoolYear,LEA,Subject,Value) %>%
+  mutate(LEA = if_else(is.na(LEA),"State Avg",LEA))
+
+tests_math <- tests_clean %>%
+  filter(Subject == "Mathematics")
+
+tests_la <- tests_clean %>%
+  filter(Subject == "Reading/Language Arts")
+```
+
+*To pay homage to my alma mater, I have chosen Hoover High School located in North Canton, Ohio and part of the North Canton City School District to evaluate.*
+
+### NCCS Mathematics vs State Average
+
+```{r}
+ggplot() +
+  geom_line(data=tests_math,aes(x=SchoolYear,y=Avg_Score,group=LEA_ID),color="gray85") +
+  geom_line(data=filter(test_total, Subject == "Mathematics"), aes(x=SchoolYear,y=Value,group=LEA,color=LEA),size=2,linetype="solid") +
+  scale_color_manual(values=c("orange","black")) +
+  annotate("label",x=3,y=79,label="North Canton City Schools",color="orange") +
+  annotate("label",x=2,y=35,label="State Average",color="black") +
+  labs(x=element_blank(),
+       y="Average Score",
+       title="How does North Canton City Schools stack up against the State Average?",
+       subtitle="Mathematics State Testing Scores from 2015 to 2019",
+        caption="Source: Ohio Highschool Performance Data") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        panel.grid.minor.y = element_blank())
+```
+
+*As you can see, there is a direct trend, where North Canton City Schools has had much higher mathematics scores than the state average and over the span of 2015 to 2019, it is easy to see that their scores have increased over time. I would like to think that is because I started taking classes there in the 2016-17 school year, but I know that isn't true.*
+
+### NCCS Reading/Language Arts vs State Average
+
+```{r}
+ggplot() +
+  geom_line(data=tests_la,aes(x=SchoolYear,y=Avg_Score,group=LEA_ID),color="gray85") +
+  geom_line(data=filter(test_total, Subject == "Reading/Language Arts"), aes(x=SchoolYear,y=Value,group=LEA,color=LEA),size=2,linetype="solid") +
+  scale_color_manual(values=c("orange","black")) +
+  annotate("label",x=2.5,y=78,label="North Canton City Schools",color="orange") +
+  annotate("label",x=3.3,y=58,label="State Average",color="black") +
+  labs(x=element_blank(),
+       y="Average Score",
+       title="How does North Canton City Schools stack up against the State Average?",
+       subtitle="Reading and Language Arts State Testing Scores from 2015 to 2019",
+        caption="Source: Ohio Highschool Performance Data") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        panel.grid.minor.y = element_blank())
+```
+
+*As you can see, there is a direct trend, where North Canton City Schools has had steady reading and language arts scores being greater than the state average and over the span of 2015 to 2019. See English classes we're not my forte so I will take the blame for not doing as well as in my math coursework. I kid, I kid. But actually, NCCS has plateaued to an extent in the upper-echelon of reading/language arts scores while it appears the state average is increasing over time. I'll have to tell my former English teacher, Mr. Clark to step up his game. He's gotten quite complacent over the years.*
+
+
